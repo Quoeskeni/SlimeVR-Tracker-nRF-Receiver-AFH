@@ -40,7 +40,6 @@ void esb_reset_pair(void);
 void esb_finish_pair(void);
 void esb_clear(void);
 void esb_write_sync(uint16_t led_clock);
-void esb_write_afh_ack(uint8_t tracker_id, uint8_t channel, uint8_t epoch);
 void esb_receive(void);
 
 #endif
