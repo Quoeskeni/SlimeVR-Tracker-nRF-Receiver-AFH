@@ -29,6 +29,8 @@
 #include <zephyr/sys/crc.h>
 
 #include "esb.h"
+#include "afh_wrapper.h"
+#include "afh.h"
 
 static struct esb_payload rx_payload;
 //static struct esb_payload tx_payload = ESB_CREATE_PAYLOAD(0,
@@ -39,6 +41,8 @@ static struct esb_payload tx_payload_pair = ESB_CREATE_PAYLOAD(0,
 //														  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 static struct esb_payload tx_payload_sync = ESB_CREATE_PAYLOAD(0,
 														  0, 0, 0, 0);
+static struct esb_payload tx_payload_afh_ack = ESB_CREATE_PAYLOAD(0,
+												  0, 0, 0, 0, 0, 0, 0, 0);
 
 uint8_t pairing_buf[8] = {0};
 static uint8_t discovered_trackers[MAX_TRACKERS] = {0};
@@ -56,6 +60,8 @@ static void esb_thread(void);
 K_THREAD_DEFINE(esb_thread_id, 1024, esb_thread, NULL, NULL, NULL, 6, 0, 0);
 
 static void esb_parse_pair(void);
+static void esb_apply_pending_afh_channel(void);
+static void esb_write_afh_ack(uint8_t pipe, uint8_t tracker_id, uint8_t channel, uint8_t epoch);
 
 //|type    |description
 //|RX  CRC8|pairing
@@ -94,9 +100,11 @@ void event_handler(struct esb_evt const *event)
 	{
 	case ESB_EVENT_TX_SUCCESS:
 		LOG_DBG("TX SUCCESS");
+		afh_wrapper_record_tx_success();
 		break;
 	case ESB_EVENT_TX_FAILED:
 		LOG_DBG("TX FAILED");
+		afh_wrapper_record_tx_failure();
 		break;
 	case ESB_EVENT_RX_RECEIVED:
 		LOG_DBG("RX");
@@ -140,6 +148,19 @@ void event_handler(struct esb_evt const *event)
 				continue;
 			default: // base address 1
 			}
+			uint8_t afh_tracker_id;
+			uint8_t afh_channel;
+			uint8_t afh_epoch;
+			bool afh_queued;
+
+			if (afh_wrapper_handle_sync_packet(rx_payload.data, rx_payload.length,
+							   &afh_tracker_id, &afh_channel, &afh_epoch,
+							   &afh_queued)) {
+				if (afh_queued)
+					esb_write_afh_ack(rx_payload.pipe, afh_tracker_id, afh_channel, afh_epoch);
+				continue;
+			}
+
 			switch (rx_payload.length)
 			{
 			case 21: // has sequence number
@@ -181,6 +202,7 @@ void event_handler(struct esb_evt const *event)
 				}
 				if (rx_payload.data[0] > 223) // reserved for receiver only
 					break;
+				afh_wrapper_record_rx_packet(rx_payload.rssi);
 				hid_write_packet_n(rx_payload.data, rx_payload.rssi); // write to hid endpoint
 				break;
 			default:
@@ -190,6 +212,18 @@ void event_handler(struct esb_evt const *event)
 		}
 		break;
 	}
+}
+
+static void esb_write_afh_ack(uint8_t pipe, uint8_t tracker_id, uint8_t channel, uint8_t epoch)
+{
+	int err;
+
+	tx_payload_afh_ack.pipe = pipe;
+	tx_payload_afh_ack.noack = false;
+	afh_build_ack_packet(tx_payload_afh_ack.data, tracker_id, channel, epoch);
+	err = esb_write_payload(&tx_payload_afh_ack);
+	if (err)
+		LOG_WRN("AFH ACK enqueue failed: %d", err);
 }
 
 int clocks_start(void)
@@ -294,6 +328,9 @@ int esb_initialize(bool tx)
 
 	if (!err)
 		esb_set_prefixes(addr_prefix, ARRAY_SIZE(addr_prefix));
+
+	if (!err)
+		err = afh_wrapper_apply_current_channel();
 
 	if (err)
 	{
@@ -490,6 +527,38 @@ void esb_pair(void)
 	esb_deinitialize();
 }
 
+static void esb_apply_pending_afh_channel(void)
+{
+	uint8_t channel;
+	uint8_t epoch;
+	int err;
+
+	if (!esb_paired || !afh_wrapper_take_pending_channel(&channel, &epoch))
+		return;
+
+	LOG_INF("Applying pending AFH channel %u epoch %u", channel, epoch);
+	err = afh_wrapper_set_channel_state(channel, epoch);
+	if (err) {
+		LOG_ERR("AFH rejected pending channel %u epoch %u: %d", channel, epoch, err);
+		return;
+	}
+
+	esb_deinitialize();
+	err = esb_initialize(false);
+	if (!err)
+		err = esb_start_rx();
+	if (err) {
+		LOG_ERR("AFH channel restart failed: %d", err);
+		esb_deinitialize();
+		afh_wrapper_set_channel_state(AFH_DEFAULT_CHANNEL, epoch);
+		err = esb_initialize(false);
+		if (!err)
+			err = esb_start_rx();
+		if (err)
+			LOG_ERR("AFH default channel restart failed: %d", err);
+	}
+}
+
 void esb_reset_pair(void)
 {
 	esb_deinitialize(); // make sure esb is off
@@ -517,6 +586,8 @@ void esb_write_sync(uint16_t led_clock)
 	tx_payload_sync.noack = false;
 	tx_payload_sync.data[0] = (led_clock >> 8) & 255;
 	tx_payload_sync.data[1] = led_clock & 255;
+	tx_payload_sync.data[2] = afh_wrapper_get_channel();
+	tx_payload_sync.data[3] = afh_wrapper_get_epoch();
 	esb_write_payload(&tx_payload_sync);
 }
 
@@ -542,6 +613,7 @@ static void esb_packet_filter_thread(void)
 static void esb_thread(void)
 {
 	clocks_start();
+	afh_wrapper_init();
 
 	sys_read(STORED_TRACKERS, &stored_trackers, sizeof(stored_trackers));
 	if (stored_trackers)
@@ -566,6 +638,7 @@ static void esb_thread(void)
 			esb_initialize(false);
 			esb_start_rx();
 		}
+		esb_apply_pending_afh_channel();
 		k_msleep(100);
 	}
 }
