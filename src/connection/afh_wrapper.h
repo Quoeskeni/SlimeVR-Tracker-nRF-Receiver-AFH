@@ -18,5 +18,6 @@ void afh_wrapper_record_tx_success(void);
 void afh_wrapper_record_tx_failure(void);
 void afh_wrapper_record_rx_packet(int8_t rssi);
 bool afh_wrapper_handle_sync_packet(const uint8_t *data, uint8_t length);
+bool afh_wrapper_take_pending_channel(uint8_t *channel);
 
 #endif
