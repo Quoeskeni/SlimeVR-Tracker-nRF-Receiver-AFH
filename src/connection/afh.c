@@ -65,6 +65,12 @@ void afh_set_epoch(uint8_t epoch)
 	current_epoch = epoch;
 }
 
+uint8_t afh_next_epoch(void)
+{
+	current_epoch++;
+	return current_epoch;
+}
+
 void afh_record_tx_success(uint8_t channel)
 {
 	if (!afh_is_channel_valid(channel))
@@ -146,7 +152,7 @@ void afh_build_sync_packet(uint8_t *data, uint8_t tracker_id,
 }
 
 void afh_build_ack_packet(uint8_t *data, uint8_t tracker_id,
-			  uint8_t channel, uint8_t epoch)
+			 uint8_t channel, uint8_t epoch)
 {
 	uint32_t crc;
 
