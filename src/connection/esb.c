@@ -29,6 +29,7 @@
 #include <zephyr/sys/crc.h>
 
 #include "esb.h"
+#include "afh_wrapper.h"
 
 static struct esb_payload rx_payload;
 //static struct esb_payload tx_payload = ESB_CREATE_PAYLOAD(0,
@@ -94,9 +95,11 @@ void event_handler(struct esb_evt const *event)
 	{
 	case ESB_EVENT_TX_SUCCESS:
 		LOG_DBG("TX SUCCESS");
+		afh_wrapper_record_tx_success();
 		break;
 	case ESB_EVENT_TX_FAILED:
 		LOG_DBG("TX FAILED");
+		afh_wrapper_record_tx_failure();
 		break;
 	case ESB_EVENT_RX_RECEIVED:
 		LOG_DBG("RX");
@@ -140,6 +143,9 @@ void event_handler(struct esb_evt const *event)
 				continue;
 			default: // base address 1
 			}
+			if (afh_wrapper_handle_sync_packet(rx_payload.data, rx_payload.length))
+				continue;
+
 			switch (rx_payload.length)
 			{
 			case 21: // has sequence number
@@ -181,6 +187,7 @@ void event_handler(struct esb_evt const *event)
 				}
 				if (rx_payload.data[0] > 223) // reserved for receiver only
 					break;
+				afh_wrapper_record_rx_packet(rx_payload.rssi);
 				hid_write_packet_n(rx_payload.data, rx_payload.rssi); // write to hid endpoint
 				break;
 			default:
@@ -294,6 +301,9 @@ int esb_initialize(bool tx)
 
 	if (!err)
 		esb_set_prefixes(addr_prefix, ARRAY_SIZE(addr_prefix));
+
+	if (!err)
+		err = afh_wrapper_apply_current_channel();
 
 	if (err)
 	{
@@ -542,6 +552,7 @@ static void esb_packet_filter_thread(void)
 static void esb_thread(void)
 {
 	clocks_start();
+	afh_wrapper_init();
 
 	sys_read(STORED_TRACKERS, &stored_trackers, sizeof(stored_trackers));
 	if (stored_trackers)
