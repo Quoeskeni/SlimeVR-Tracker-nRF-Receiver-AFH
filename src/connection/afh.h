@@ -15,7 +15,9 @@
 #define AFH_MIN_CHANNEL 0U
 #define AFH_MAX_CHANNEL (AFH_CHANNEL_COUNT - 1U)
 #define AFH_SYNC_PACKET_TYPE 0xF0U
+#define AFH_ACK_PACKET_TYPE 0xF1U
 #define AFH_SYNC_PACKET_SIZE 8U
+#define AFH_ACK_PACKET_SIZE AFH_SYNC_PACKET_SIZE
 #define AFH_SYNC_CRC_SEED 0x93a409ebU
 
 struct afh_sync_packet {
@@ -40,5 +42,7 @@ bool afh_parse_sync_packet(const uint8_t *data, uint8_t length,
 			   uint8_t *tracker_id, uint8_t *channel, uint8_t *epoch);
 void afh_build_sync_packet(uint8_t *data, uint8_t tracker_id,
 			   uint8_t channel, uint8_t epoch);
+void afh_build_ack_packet(uint8_t *data, uint8_t tracker_id,
+			  uint8_t channel, uint8_t epoch);
 
 #endif

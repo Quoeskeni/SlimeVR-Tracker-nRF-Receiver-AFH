@@ -29,6 +29,7 @@
 #include <zephyr/sys/crc.h>
 
 #include "esb.h"
+#include "afh.h"
 #include "afh_wrapper.h"
 
 static struct esb_payload rx_payload;
@@ -40,6 +41,8 @@ static struct esb_payload tx_payload_pair = ESB_CREATE_PAYLOAD(0,
 //														  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 static struct esb_payload tx_payload_sync = ESB_CREATE_PAYLOAD(0,
 														  0, 0, 0, 0);
+static struct esb_payload tx_payload_afh_ack = ESB_CREATE_PAYLOAD(0,
+														  0, 0, 0, 0, 0, 0, 0, 0);
 
 uint8_t pairing_buf[8] = {0};
 static uint8_t discovered_trackers[MAX_TRACKERS] = {0};
@@ -143,8 +146,10 @@ void event_handler(struct esb_evt const *event)
 				continue;
 			default: // base address 1
 			}
-			if (afh_wrapper_handle_sync_packet(rx_payload.data, rx_payload.length))
+			if (afh_wrapper_handle_sync_packet(rx_payload.data, rx_payload.length)) {
+				esb_write_afh_ack(rx_payload.data[1], rx_payload.data[2], rx_payload.data[3]);
 				continue;
+			}
 
 			switch (rx_payload.length)
 			{
@@ -530,6 +535,15 @@ void esb_write_sync(uint16_t led_clock)
 	esb_write_payload(&tx_payload_sync);
 }
 
+void esb_write_afh_ack(uint8_t tracker_id, uint8_t channel, uint8_t epoch)
+{
+	tx_payload_afh_ack.pipe = 1;
+	tx_payload_afh_ack.length = AFH_ACK_PACKET_SIZE;
+	tx_payload_afh_ack.noack = false;
+	afh_build_ack_packet(tx_payload_afh_ack.data, tracker_id, channel, epoch);
+	esb_write_payload(&tx_payload_afh_ack);
+}
+
 // TODO:
 void esb_receive(void)
 {
@@ -570,6 +584,11 @@ static void esb_thread(void)
 
 	while (1)
 	{
+		uint8_t pending_channel;
+
+		if (afh_wrapper_take_pending_channel(&pending_channel))
+			afh_wrapper_apply_channel(pending_channel);
+
 		if (!esb_paired)
 		{
 			esb_pair();

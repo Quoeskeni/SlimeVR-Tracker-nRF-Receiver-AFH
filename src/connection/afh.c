@@ -144,3 +144,19 @@ void afh_build_sync_packet(uint8_t *data, uint8_t tracker_id,
 	crc = crc32_k_4_2_update(AFH_SYNC_CRC_SEED, data, 4);
 	memcpy(&data[4], &crc, sizeof(crc));
 }
+
+void afh_build_ack_packet(uint8_t *data, uint8_t tracker_id,
+			  uint8_t channel, uint8_t epoch)
+{
+	uint32_t crc;
+
+	if (data == NULL)
+		return;
+
+	data[0] = AFH_ACK_PACKET_TYPE;
+	data[1] = tracker_id;
+	data[2] = afh_is_channel_valid(channel) ? channel : AFH_DEFAULT_CHANNEL;
+	data[3] = epoch;
+	crc = crc32_k_4_2_update(AFH_SYNC_CRC_SEED, data, 4);
+	memcpy(&data[4], &crc, sizeof(crc));
+}

@@ -7,6 +7,7 @@
 #include <errno.h>
 
 #include <esb.h>
+#include <zephyr/sys/atomic.h>
 #include <zephyr/logging/log.h>
 
 #include "afh.h"
@@ -15,6 +16,8 @@
 LOG_MODULE_REGISTER(afh_wrapper, LOG_LEVEL_INF);
 
 static bool initialized;
+static atomic_t pending_channel = ATOMIC_INIT(-1);
+static atomic_t pending_epoch = ATOMIC_INIT(0);
 
 void afh_wrapper_init(void)
 {
@@ -91,7 +94,6 @@ bool afh_wrapper_handle_sync_packet(const uint8_t *data, uint8_t length)
 	uint8_t tracker_id;
 	uint8_t channel;
 	uint8_t epoch;
-	int err;
 
 	afh_wrapper_init();
 	if (!afh_parse_sync_packet(data, length, &tracker_id, &channel, &epoch))
@@ -101,13 +103,25 @@ bool afh_wrapper_handle_sync_packet(const uint8_t *data, uint8_t length)
 		return true;
 	}
 
-	err = afh_wrapper_apply_channel(channel);
-	if (err) {
-		LOG_ERR("AFH sync channel %u from tracker %u failed: %d", channel, tracker_id, err);
-		return true;
-	}
+	atomic_set(&pending_epoch, epoch);
+	atomic_set(&pending_channel, channel);
+	LOG_INF("AFH sync queued: tracker %u channel %u epoch %u", tracker_id, channel, epoch);
+	return true;
+}
 
-	afh_set_epoch(epoch);
-	LOG_INF("AFH sync applied: tracker %u channel %u epoch %u", tracker_id, channel, epoch);
+bool afh_wrapper_take_pending_channel(uint8_t *channel)
+{
+	atomic_val_t pending;
+
+	afh_wrapper_init();
+	if (channel == NULL)
+		return false;
+
+	pending = atomic_set(&pending_channel, -1);
+	if (pending < AFH_MIN_CHANNEL || pending > AFH_MAX_CHANNEL)
+		return false;
+
+	*channel = (uint8_t)pending;
+	afh_set_epoch((uint8_t)atomic_get(&pending_epoch));
 	return true;
 }
