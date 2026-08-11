@@ -246,11 +246,11 @@ static void console_thread(void)
 		{
 			print_info();
 		}
-		else if (strcmp(line, command_uptime) == 0)
+		else if (strcmp(argv[0], command_uptime) == 0)
 		{
 			print_uptime();
 		}
-		else if (strcmp(line, command_add) == 0)
+		else if (strcmp(argv[0], command_add) == 0)
 		{
 			if (argc != 2)
 			{
@@ -265,24 +265,24 @@ static void console_thread(void)
 			else
 				printk("Invalid address\n");
 		}
-		else if (strcmp(line, command_remove) == 0)
+		else if (strcmp(argv[0], command_remove) == 0)
 		{
 			esb_pop_pair();
 		}
-		else if (strcmp(line, command_list) == 0)
+		else if (strcmp(argv[0], command_list) == 0)
 		{
 			print_list();
 		}
-		else if (strcmp(line, command_reboot) == 0)
+		else if (strcmp(argv[0], command_reboot) == 0)
 		{
 			skip_dfu();
 			sys_reboot(SYS_REBOOT_COLD);
 		}
-		else if (strcmp(line, command_pair) == 0)
+		else if (strcmp(argv[0], command_pair) == 0)
 		{
 			esb_reset_pair();
 		}
-		else if (strcmp(line, command_exit) == 0)
+		else if (strcmp(argv[0], command_exit) == 0)
 		{
 			esb_finish_pair();
 		}
@@ -312,7 +312,7 @@ static void console_thread(void)
 				print_afh_info();
 		}
 #if DFU_EXISTS
-		else if (strcmp(line, command_dfu) == 0)
+		else if (strcmp(argv[0], command_dfu) == 0)
 		{
 #if ADAFRUIT_BOOTLOADER
 			NRF_POWER->GPREGRET = 0x57;
@@ -323,7 +323,7 @@ static void console_thread(void)
 #endif
 		}
 #endif
-		else if (strcmp(line, command_meow) == 0)
+		else if (strcmp(argv[0], command_meow) == 0)
 		{
 			print_meow();
 		}

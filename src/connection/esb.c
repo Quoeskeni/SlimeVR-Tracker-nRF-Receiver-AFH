@@ -483,7 +483,9 @@ void esb_parse_pair()
 void esb_pair(void)
 {
 	LOG_INF("Pairing");
-	esb_set_addr_paired();
+	LOG_INF("Pairing state: started");
+	esb_set_addr_discovery();
+	afh_wrapper_set_channel_state(AFH_DEFAULT_CHANNEL, afh_wrapper_get_epoch());
 	esb_initialize(false);
 	esb_start_rx();
 	tx_payload_pair.pipe = 0;
@@ -525,6 +527,7 @@ void esb_pair(void)
 		k_usleep(1);
 	}
 	set_led(SYS_LED_PATTERN_OFF, SYS_LED_PRIORITY_CONNECTION);
+	LOG_INF("Pairing state: stopped");
 	esb_deinitialize();
 }
 
