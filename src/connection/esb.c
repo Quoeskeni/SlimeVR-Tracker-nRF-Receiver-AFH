@@ -513,10 +513,9 @@ void esb_pair(void)
 			esb_parse_pair();
 			LOG_DBG("tx: %16llX", *(uint64_t *)tx_payload_pair.data);
 //			esb_flush_tx();
+			esb_flush_tx();
 			esb_write_payload(&tx_payload_pair); // Add to TX buffer
 			pairing_buf[1] = 255; // flag packet processed
-			k_msleep(10);
-			esb_flush_tx(); // Flush TX buffer for next pairing burst
 			continue;
 		case 2:
 			esb_flush_tx(); // Flush TX buffer for next pairing burst
