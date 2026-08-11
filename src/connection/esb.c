@@ -512,18 +512,26 @@ void esb_pair(void)
 		case 0: // first packet in pairing burst
 			esb_parse_pair();
 			LOG_DBG("tx: %16llX", *(uint64_t *)tx_payload_pair.data);
-//			esb_flush_tx();
 			esb_flush_tx();
 			esb_write_payload(&tx_payload_pair); // Add to TX buffer
 			pairing_buf[1] = 255; // flag packet processed
 			continue;
+		case 1:
+			LOG_INF("Pairing handshake phase 1 acknowledged");
+			esb_flush_tx();
+			pairing_buf[1] = 255; // flag packet processed
+			continue;
 		case 2:
 			esb_flush_tx(); // Flush TX buffer for next pairing burst
+			pairing_buf[1] = 255; // flag packet processed
+			continue;
 		case 255:
+			k_msleep(10);
+			continue;
 		default:
-			break;
+			pairing_buf[1] = 255; // flag packet processed
+			continue;
 		}
-		pairing_buf[1] = 255; // flag packet processed
 		//esb_flush_rx();
 		//esb_flush_tx();
 		//esb_write_payload(&tx_payload_pair); // Add to TX buffer
