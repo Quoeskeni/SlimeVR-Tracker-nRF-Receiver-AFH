@@ -193,15 +193,19 @@ void event_handler(struct esb_evt const *event)
 				// Fall-throught
 			case 16:
 				uint8_t imu_id = rx_payload.data[1];
+				uint8_t packet_type = rx_payload.data[0];
 				if (imu_id >= stored_trackers) // not a stored tracker
 					continue;
-				if (discovered_trackers[imu_id] < DETECTION_THRESHOLD) // garbage filtering of nonexistent tracker
+				if (packet_type > 223) // reserved for receiver only
+					break;
+				if (discovered_trackers[imu_id] < DETECTION_THRESHOLD) // warm up the ID filter without starving SlimeVR registration
 				{
 					discovered_trackers[imu_id]++;
-					continue;
+					if (packet_type != 0 && packet_type != 3 && packet_type != 5)
+						continue;
+					LOG_INF("Forwarding startup packet type %d for tracker %d before detection threshold (%d/%d)",
+						packet_type, imu_id, discovered_trackers[imu_id], DETECTION_THRESHOLD);
 				}
-				if (rx_payload.data[0] > 223) // reserved for receiver only
-					break;
 				afh_wrapper_record_rx_packet(rx_payload.rssi);
 				hid_write_packet_n(rx_payload.data, rx_payload.rssi); // write to hid endpoint
 				break;
